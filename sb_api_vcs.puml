@@ -1,0 +1,140 @@
+@startuml "SEARCH request"
+title: "/search (POST, sync): Processing external search request "
+/'
+Общее описание синхронной обработки FIND запроса к VM
+'/
+actor "СБЕР" as SB #coral
+participant "VM-API" as VM #LightGreen
+participant "Search Engine" as SE #LightBlue
+
+' autonumber 10 10 "<b>[000]"
+
+note over SB
+    Пользователь СБ 
+    сформировал задачу
+    для поиска.
+end note
+
+SB -> VM: **""/find""**: (SYNC POST запрос)
+VM -> VM: **PARSE** \norg_id; user_id; \nrequest_id; request_body; \nweb-hook URL
+VM -> SE: AUGMENT
+SE -> VM: AUGMENT Result
+alt Ошибка при парсинге запроса
+    VM -[#red]-x SB: ""**400**"": Bad Request  / \nОбогащенный вариант запроса
+end alt
+
+VM -> VM: **VALIDATE**: проверка запроса
+alt Валидация не пройдена
+    VM -[#red]-x SB: ""**401**"": Not Authorized \n""**403**"": Forbidden \n""**429**"": Too Many Requests
+end alt
+
+VM ->> SE ++ #10FF10: **""request_id""**: (async) Запустить поиск\nс параметрами запроса
+SE -> VM: **""search_id""**    
+VM -[#Green]-x SB: **""202: search_id:""** \n[Актуальный запрос]
+
+@enduml
+
+' -----------------------------
+
+@startuml "Check Result"
+title "/search/{search_id} (GET, async poll): Search Status & Result polling"
+actor "СБЕР" as SB #coral
+participant "VM-API" as VM #LightGreen
+participant "Search Engine" as SE #LightBlue
+
+' autonumber 10 10 "<b>[000]"
+
+
+VM -[#Gray]> VM: ...
+VM -[#Gray]> VM: **PARSE** \norg_id; user_id; \nrequest_id; request_body; \n**web-hook URL**
+VM -> VM: ...
+
+VM -[#Gray]>> SE ++ #10FF10: **""request_id""**: (async) Запустить поиск\nс параметрами запроса
+note over SE
+    Поисковая машина
+    отрабатывает запрос
+end note
+SE -[#Gray]> VM: **""search_id""**    
+VM -[#Green]-x SB: **""202: search_id""** / [Актуальный запрос]
+loop SB Polling: Till search in progress
+SB ->> VM: Get search status: ""**search_id**""
+VM ->> SE: Check status: **""search_id""**
+SE ->> VM: **""search_id: status & current result set""**
+VM ->> SB: web-hook URL: **""200: search_id: status & current result set""**
+end loop
+
+SE ->> VM --: **""search_id: status & final result set""**
+VM -[#Green]>x SB: web-hook URL: **""200: search_id: status & [Final result set]""**
+@enduml
+
+
+' -----------------------------
+
+@startuml "Cancel Search"
+title "/search/{search_id} (DELETE, sync): Cancel running search"
+actor "СБЕР" as SB #coral
+participant "VM-API" as VM #LightGreen
+participant "Search Engine" as SE #LightBlue
+
+' autonumber 10 10 "<b>[000]"
+
+VM -[#Gray]> VM: ...
+VM -[#Gray]> VM: **PARSE** \norg_id; user_id; \nrequest_id; request_body; \n**web-hook URL**
+VM -> VM: ...
+
+VM -[#Gray]>> SE ++ #10FF10: **""request_id""**: (async) Запустить поиск\nс параметрами запроса
+note over SE
+    Поисковая машина
+    отрабатывает запрос
+end note
+
+SE -[#Gray]> VM: **""search_id""**    
+VM -[#Green]-x SB: **""202: search_id""** / [Актуальный запрос]
+
+loop SB Polling: Till search in progress or CANCEL reqeust
+SB ->> VM: Send **""GET (status)""** or ""**DELETE**"": ""**search_id**""
+alt GET STATUS
+    VM ->> SE: Get search status: **""search_id""**
+    SE ->> VM: **""search_id: status: RUNNING""** \n[Current result set]
+    VM ->> SB: web-hook URL: **""200: request_id: status: RUNNING""** \n[Current result set]
+else DELETE (Cancel) Request
+    VM -[#red]>> SE: **CANCEL:** **""search_id""**
+    SE -[#red]>> VM: **""search_id: status: CANCELLED""** \n[Current result set]
+    VM -[#red]x SB: web-hook URL: **""200: search_id: status: CANCELLED""** \n[Current result set]
+end alt
+end loop
+
+SE ->> VM --: **""search_id: status: DONE""** \n[Final result set]
+VM -[#Green]>x SB: web-hook URL: **""200: search_id: status: DONE""** \n[Final result set]
+@enduml
+
+' -----------------------------
+
+@startuml "Make Order"
+title "/order (POST, sync): Create purchase order"
+actor "СБЕР" as SB #coral
+participant "VM-API" as VM #LightGreen
+participant "Search Engine" as SE #LightBlue
+participant "V.Market" as MP #LightGray
+
+' autonumber 10 10 "<b>[000]"
+
+note over SB
+    Пользователь отобрал из поиска
+    товары для закупки и передает
+    эти товары для формирования
+    заказа.
+end note
+
+SB -> VM: POST: **""search_id""**: \n[ordering items (card's data)]
+
+VM -> MP: Create order: **""search_id""**: \n[ordering items]
+MP -> VM: **""order_id""**
+
+alt "Is order_id valid"
+    VM -[#Green]x SB: **""201: order_id""**: Order created
+else
+    VM -[#Red]x SB: **""400: search_id""**: Can't create order
+end alt
+
+@enduml
