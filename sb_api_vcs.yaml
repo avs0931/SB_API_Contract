@@ -1,0 +1,823 @@
+openapi: 3.0.0
+info:
+  description: Proposal for Sber/VM API
+  version: 0.0.1a
+  title: Sber/VM API Draft
+  contact:
+    email: aa.vasilyev@etpgpb.ru
+servers:
+  - url: "https://127.0.0.1/v01"
+paths:
+  /search:
+    post:
+      security:
+        - bearerAuth: [] 
+
+      summary: Processing external search request
+      description: >+
+        (**SYNC - синхронный**)
+        Обработка поискового запроса по параметрам, полученным от внешней системы
+      operationId: createSearch
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SearchRequestBody"
+        description: Search session parameters
+        required: true
+      responses:
+        "202":
+          description: Accepted - Запрос на поиск принят поисковой машиной
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchResponse"
+        "400":
+          description: Bad Request - Запрос на поиск имеет некорректный формат
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchResponse"
+        "401":
+          description: Unauthorized - Запрос не авторизован на стороне VM
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchResponse"
+       
+        "403":
+          description: Forbidden - Выполнение запроса запрещено на стороне VM
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchResponse"
+        "408":
+          description: Request Timeout - Превышено предельное время обработки запроса на
+            стороне VM
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchResponse"
+        "429":
+          description: Too Many Requests - Превышен [rate limit] (для данного пользователя)
+            или [service limit] (для данной организации)
+          headers:
+            Retry-After:
+              description: Период ожидания (в секундах) после которого можно повторить запрос.
+              schema:
+                minimum: 1
+                type: integer
+                example: 42
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchResponse"
+        "500":
+          description: "Internal Service Error - ALERT: Ошибка сервера
+            (неидентифицированная)"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchResponse"
+        "501":
+          description: Not Implemented - Запрос данного типа или в данной конфигурации не
+            поддерживается
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchResponse"
+        "503":
+          description: "Service unavailable - ALERT: Сервис поиска временно недоступен"
+          headers:
+            Retry-After:
+              description: Период ожидания (в секундах) после которого можно повторить запрос.
+              schema:
+                minimum: 1
+                type: integer
+                example: 120
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchResponse"
+
+  /search/{search_id}:
+    get:
+      security:
+        - bearerAuth: [] 
+
+      summary: Get search status and result
+      description: >+
+        (**SYNC - синхронный**)
+        Возвращает текущее состояние (`search_status`) и результаты поиска, если они доступны.
+        До завершения обработки запроса (`search_status = RUNNING`) возвращается только статус и
+        текущие результаты выполнения поискового запроса, если они доступны.
+        По завершении обработки (`search_status = DONE`) доступны результаты поиска.
+      operationId: getSearchState
+      parameters:
+        - name: search_id
+          in: path
+          description: >+
+            Уникальный код поисковой сессии на стороне VM. 
+            (из ответа 202 при запуске поиска)
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+
+        "200":
+          description: SearchState - Поиск найден и принадлежит этой внешней
+            системе/пользователю
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchResponse"
+            
+        "401":
+          description: Not Authorized - Токен недействителен
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchResponse"
+           
+        "404":
+          description: SEARCH NOT FOUND - Поиск не найден либо создан для другой внешней
+            системы/пользователя
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchResponse"
+
+        "429":
+          description: >+
+           Too Many Requests - превышен лимит на количество запросов
+          headers:
+            Retry-After:
+              description: Период ожидания (в секундах) после которого можно повторить запрос.
+              schema:
+                minimum: 1
+                type: integer
+                example: 42
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchResponse"
+  
+    delete:
+      security:
+        - bearerAuth: [] 
+
+      summary: Cancel running search
+      description: >+
+        (**SYNC - синхронный**)
+        Остановка поискового запроса на стороне VM.
+        Объект `Response` содержит значение `search_status = CANCELLED`.
+        Может содержать результаты выполнения поискового запроса, 
+        доступные на момент прекращения обработки.
+      operationId: cancelSearch
+      parameters:
+        - name: search_id
+          in: path
+          description: >+
+            Уникальный код поисковой сессии на стороне VM. 
+            (из ответа 202 при запуске поиска)
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: "SEARCH CANCELLED - Поиск остановлен. Статус CANCELLED"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchResponse"
+
+        "401":
+          description: "Not Authorized - Токен недействителен"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchResponse"
+
+        "404":
+          description: "SEARCH NOT FOUND - Поиск не найден"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchResponse"
+
+        "409":
+          description: >+
+            SEARCH NOT CANCELLABLE - Остановить нечего: поиск уже завершён (DONE), 
+            либо уже остановлен (CANCELLED)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchResponse"
+  /order:
+    post:
+      security:
+        - bearerAuth: [] 
+
+      description: >+
+        (**SYNC - синхронный**)
+        Пользователь отобрал из поиска товары для закупки и передает
+        эти товары для формирования заказа / коммерческого предложения.
+      summary: Create purchase order upon search result
+      operationId: createPurchaseOrder
+      requestBody:
+        description: >+
+          Тело запроса на создание заказа / коммерческого предложение.
+          В данном вызове выполняется только создание такого заказа и возвращается его идентификатор.
+          Обработка запроса выполняется асинхронно другим сервисом.
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OrderRequestBody"
+      responses:
+        "200":
+          description: Заказ создан успешно
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderResponse"
+                
+        "400":
+          description: "Can't create purchase order"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderResponse"
+
+        "401":
+          description: "Not Authorized - Токен недействителен"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderResponse"
+
+        "404":
+          description: "Search Request not found or search results expired"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderResponse"
+
+        "410":
+          description: "Ordered products not found or expired"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderResponse"
+
+        "429":
+          description: >+
+           Too Many Requests - превышен лимит на количество запросов
+          headers:
+            Retry-After:
+              description: Период ожидания (в секундах) после которого можно повторить запрос.
+              schema:
+                minimum: 1
+                type: integer
+                example: 42
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderResponse"
+
+        "503":
+          description: >+
+           Service Unavailable
+          headers:
+            Retry-After:
+              description: Период ожидания (в секундах) после которого можно повторить запрос.
+              schema:
+                minimum: 1
+                type: integer
+                example: 120
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderResponse"
+
+components:
+  schemas:
+    # External request's context provided by client
+    RequestContext:
+      type: object
+      description: >+
+        Контекст запроса, полученный от внешнего клиента.
+        Никогда не изменяется в ходе обработки заапроса.
+      required:
+        - request_id
+        - request_timestamp
+      properties:
+        request_id:
+          nullable: false
+          type: "string"
+          format: "uuid"
+          description: "Уникальный код запроса на поиск со стороны отправителя"
+        request_timestamp:
+          nullable: false
+          type: "string"
+          format: date-time
+          description: "ISO 8601 (Z) - Метка времени создания запроса на стороне отправителя"
+          
+    # General search request parameters
+    SearchRequestBody:
+      type: "object"
+      description: Объект [параметры поискового запроса] от внешней системы
+      required:
+        - request_context
+        - query_params
+      properties:
+        request_context:
+          $ref: "#/components/schemas/RequestContext"
+        query_params:
+          $ref: "#/components/schemas/QueryParams"
+
+    # SEARCH RESPONSE object
+    SearchResponse:
+      type: object
+      description: >+
+        Объект [ответ] сервера VM на внешний запрос. Типовой ответ для всех эндпоинтов API.
+      required:
+        - request_context
+        - description
+        - answer_timestamp
+      properties:
+        request_context:
+          $ref: "#/components/schemas/RequestContext"
+        description:
+          type: string
+          description: Расширенное описание статуса ответа VM
+        answer_timestamp:
+          type: string
+          format: date-time
+          description: Метка времени ISO-8601 (timezone!) создания ответа на стороне VM
+        search_id:
+          type: string
+          nullable: true
+          format: uuid
+          description: >+
+            Уникальный код поисковой сессии на стороне VM.
+            **request_id <-> search_id** образуют уникальную пару для точной идентификации и
+            сопоставления результатов с конкретным поисковым запросом.
+            **Может** иметь значение NULL, если `search_status = NONE`.
+        search_status:
+          type: string
+          nullable: false
+          description: >+
+            Текущий статус выполнения поискового запроса на стороне VM:
+            NONE - поисковый запрос не запущен
+            RUNNING - поисковый запрос выполняется
+            DONE - поисковый запрос завершен. Доступны результаты.
+            CANCELLED - поисковый запрос остановлен по запросу внешней системы. Результаты недоступны.
+            ERROR - поисковый запрос прерван из-за ошибки на стороне выполнения. Результаты недоступны.
+          default: NONE
+          enum: [NONE, RUNNING, DONE, CANCELLED, ERROR]
+        search_result:
+          description: Контейнер с доступными результатами выполнения поискового запроса.
+          $ref: "#/components/schemas/SearchResult"
+       
+    # CONTAINER: Result of search
+    SearchResult:
+      type: object
+      # Вариант: с возратом результатов по мере выполнения поиска!
+      description: >+
+        Контейнер с атрибутами поиска и массивом результатов обработки поискового запроса.
+        При `search_status = RUNNING` может содержать частичный набор результатов 
+        При `search_status = DONE`` **может** содержать полный набор результатов,
+        если результаты доступны
+      required:
+        - query_params
+        - items_count
+        - items
+      properties:  
+        query_params:
+          $ref: "#/components/schemas/QueryParams"
+        items_count:
+          type: integer
+          description: Количество товаров; 0 = товары не найдены
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProductCard"
+    
+    QueryParams:
+      type: object
+      description: >+
+        Параметры поиска, в т.ч. необязательные, которые должны учитываться при 
+        выполнении запроса.
+      required:
+        - search_pattern
+        - delivery_address
+      properties:
+        search_pattern:
+          nullable: false
+          minLength: 1
+          type: "string"
+          description: >+
+            Тело (текст / образец) поискового запроса в свободной форме.
+            Обязательный параметр.
+            Если текст поискового запроса не может быть опознан как содержательный текст,
+            то такой запрос будет отклонен с ошибкой 400.
+        delivery_address:
+          nullable: false
+          type: "string"
+          description: >+
+            "Адрес доставки"
+            Обязательный параметр.
+            Если текст поискового запроса не может быть валидирован как адрес,
+            то такой запрос будет отклонен с ошибкой 400.
+        query_filters:
+          nullable: true
+          type: object
+          $ref: '#/components/schemas/QueryFilters'
+
+    QueryFilters:
+      type: object
+      description: >+
+        Дополнительные параметры, которые могут уточнить / расширить область поиска и
+        отфильтровать наиболее релевантные результаты
+      properties:
+        product_aliases:
+          description: >+
+            Список слов - возможных (альтернативных) наименований товара (синонимов)
+          type: array
+          nullable: true
+          items:
+            type: string
+        product_keywords:
+          description: >+
+            Список ключевых слов, указывающих на релевантность товара
+          type: array
+          nullable: true
+          items:
+            type: string
+        user_rank:
+          description: >+
+            Рейтинг товара по мнению пользователей (покупателей).
+          type: string
+          nullable: false
+          default: Unknown
+          enum:
+            [Unknown, Low, Moderate, High]
+          # Интерпретация значений по 5-ти балльной шкале:
+          #  Unknown: Значение неизвестно, количественная оценка отсутствует или недоступна
+          #      Low: 0 < platform_value <= 2
+          # Moderate: 2 < platform_value <= 4
+          #     High: 4 < platform_value
+        supplier_rank:
+          description: >+
+            Рейтинг поставщика.
+          type: string
+          nullable: true
+          default: Unknown
+          enum:
+            [Unknown, Low, Moderate, High]
+          # Интерпретация значений по 5-ти балльной шкале: см. выше.
+        manufacturer_rank:
+          description: >+
+            Рейтинг изготовителя.
+          type: string
+          nullable: true
+          default: Unknown
+          enum:
+            [Unknown, Low, Moderate, High]
+          # Интерпретация значений по 5-ти балльной шкале: см. выше.
+        brands:
+          description: >+
+            Список предпочительных брендов / торговых марок товара
+          type: array
+          nullable: true
+          items:
+            type: string
+        manufacturers:
+          description: >+
+            Список названий компаний - производителей товара
+          type: array
+          nullable: true
+          items:
+            type: string
+        oem_allowed:
+          description: >+
+            Допускается продукция OEM/NONAME производителей.
+            При значении TURE допускается только оригинальная продукция от производителей, указанных
+            в списке `manufacturers`.
+          type: boolean
+          default: true
+          nullable: true
+          minimum: 0
+        min_price:
+          description: >+
+            Минимально допустимая цена
+          type: number
+          nullable: true
+          minimum: 0
+        max_price:
+          description: >+
+            Максимально допустимая цена
+          type: number
+          nullable: true
+          minimum: 0
+        price_currency:
+          $ref: "#/components/schemas/Currencies"
+        delivery_cost:
+          description: >+
+            Максимально допустимая стоимость доставки
+          type: number
+          nullable: true
+          minimum: 0
+        delivery_currency:
+          $ref: "#/components/schemas/Currencies"
+        delivery_time:
+          description: >+
+            Максимально допустимый срок доставки (в днях)
+          nullable: true
+          minimum: 0
+          type: integer
+
+    ProductCard:
+      type: object
+      description: >+
+        Карточка товара в результатах поиска. 
+        Представлена в структуре эталонной карточки.
+      required:
+        - product_id
+        - rank
+        - product_description
+        - characteristics
+        - offers
+      properties:
+        product_id:
+          type: string
+          format: uuid
+          description: >+
+            Идентификатор карточки товара в поиске.
+            **Важно!** Данный id определяет карточку, а не конкретный товар! Один и тот же товар 
+            в разных сессиях поиска будет иметь совершенно разные product_id.
+        rank:
+          description: >+
+            Рейтинг товара по мнению пользователей.
+          type: string
+          nullable: false
+          default: Unknown
+          enum:
+            [Unknown, Low, Moderate, High]
+          # Интерпретация значений по 5-ти балльной шкале:
+          #  Unknown: Значение неизвестно, количественная оценка отсутствует или недоступна
+          #      Low: 0 < platform_value <= 2
+          # Moderate: 2 < platform_value <= 4
+          #     High: 4 < platform_value
+        product_description:
+          description: Описание товара в стандартной структуре, применяется для любого товара в поисковой выдаче.
+          $ref: "#/components/schemas/ProductDescription"
+        characteristics:
+          type: array
+          description: Список характеристик товара, формируется динамически для конкретного результата в поиске.
+          items:
+            $ref: "#/components/schemas/Characteristics"
+        offers:
+          type: array
+          description: Список предложений по товару из источников (поставщиков)
+          items:
+            $ref: "#/components/schemas/Offer"
+    
+    ProductDescription:
+      type: object
+      description: Общее описание товара
+      required:
+        - model
+        - min_price
+        - max_price
+      properties:
+        model:
+          type: string
+          description: Модель / наименование товара
+        currency:
+          $ref: "#/components/schemas/Currencies"
+        min_price:
+          type: number
+          minimum: 0
+          default: 0
+          description: Минимальная цена
+        max_price:
+          type: number
+          minimum: 0
+          default: 0
+          description: Максимальная цена
+        manufacturer:
+          type: string
+          description: Производитель/бренд
+        dimensions:
+          $ref: "#/components/schemas/Dimensions"
+        article:
+          type: string
+          description: Артикул - код товара по данным поставщика, представленного в данной карточке товара.
+        line:
+          type: string
+          description: Линейка товаров по данным поставщика, представленного в данной карточке товара.
+        variant:
+          type: string
+          description: Опции товара / исполнения по данным поставщика, представленного в данной карточке товара.
+        image_url:
+          type: string
+          format: uri
+          description: Ссылка на картинку товара по данным поставщика, представленного в данной карточке товара.
+    
+    Characteristics:
+      type: object
+      description: >+
+        Характеристика товара - формируется динамически по данным, 
+        доступным в описании товара во внешней системе.
+      required:
+        - name
+        - value
+      properties:
+        name:
+          type: string
+          nullable: false
+          description: Наименование характеристики
+        value:
+          type: string
+          nullable: true
+          description: Значение характеристики
+        unit:
+          type: string
+          nullable: true
+          description: Единица измерения характеристики (может отсутствовать)
+   
+    Offer:
+      type: object
+      description: Конкретное предложение, релевантное данному товару
+      required:
+        - offer_id
+        - platform_type
+        - platform_name
+        - source_product_name
+        - price
+        - currency
+        - supplier_name
+        - product_url
+      properties:
+        offer_id:
+          type: string
+          format: uuid
+          description: Идентификатор предложения в результатах поиска
+        platform_type:
+          type: string
+          description: Тип площадки / источник предложения
+        platform_name:
+          type: string
+          description: Название площадки / источника предложения
+        source_product_name:
+          type: string
+          description: Название товара в источнике
+        price:
+          type: number
+          minimum: 0
+          description: Цена товара
+        currency:
+          $ref: "#/components/schemas/Currencies"
+        dimensions:
+          $ref: "#/components/schemas/Dimensions"
+        delivery_cost:
+          type: number
+          nullable: true
+          minimum: 0
+          description: Стоимость доставки
+        delivery_currency:
+          $ref: "#/components/schemas/Currencies"
+        delivery_time:
+          type: string
+          description: Срок доставки (текст, например "2-3 рабочих дня")
+        supplier_name:
+          type: string
+          description: Название поставщика по данным источника
+        supplier_rating:
+          type: number
+          description: Рейтинг поставщика
+        product_url:
+          type: string
+          format: uri
+          description: Ссылка на страницу товара в источнике
+
+    OrderRequestBody:
+      description: Тело запроса на формирование заказа на закупку или подготовку коммерческого предложения
+      type: object
+      required:
+        - search_id
+        - selected_items
+      properties:
+        search_id:
+          type: string
+          format: uuid
+          description: Идентификатор завершенного поискового запроса
+        selected_items:
+          description: >+
+            Массив объектов `ProductCard` (т.е. полное описание товара, включая предложения,
+            доступные для данного товара в поиске), отобранных на стороне внешней системы
+            для формирования заказа.
+          type: array
+          items:
+            $ref: "#/components/schemas/ProductCard"
+
+    # ORDER RESPONSE object
+    OrderResponse:
+      type: object
+      description: >+
+        Объект [ответ] сервера VM на запрос создания заказа на закупку.
+      required:
+        - request_context
+        - description
+        - answer_timestamp
+        - search_id
+      properties:
+        request_context:
+          $ref: "#/components/schemas/RequestContext"
+
+        description:
+          type: string
+          description: Расширенное описание статуса ответа VM
+
+        answer_timestamp:
+          type: string
+          format: date-time
+          description: Метка времени ISO-8601 (timezone!) создания ответа на стороне VM
+
+        search_id:
+          type: string
+          nullable: false
+          format: uuid
+          description: >+
+            Уникальный код поисковой сессии на стороне VM.
+            **request_id <-> search_id** образуют уникальную пару для точной идентификации и
+            сопоставления результатов с конкретным поисковым запросом.
+            **Может** иметь значение NULL, если `search_status = NONE`.
+
+        order_id:
+          description: >+
+            ID запроса на формирование заказа, сформированного на стороне VM.
+            Может иметь значение `null`, если при формировании заказа возникли ошибки.
+          type: string
+          nullable: true
+          format: "uuid"
+
+        error_items:
+          description: >+
+            Массив объектов `ProductCard` (т.е. полное описание товара), 
+            при обработке которых возникли ошибки.
+          nullable: true
+          type: array
+          items:
+            $ref: "#/components/schemas/ProductCard"
+
+    Currencies:
+      description: Валюта стоимостного показателя - трехбуквенный код в формате ISO 4217
+      type: object
+      nullable: true
+      externalDocs:
+        description: Официальный источник ISO 4217:2015 / XML, XLS
+        url: https://www.six-group.com/en/products-services/financial-information/market-reference-data/data-standards.html
+      required:
+        - currency_code
+      properties:
+          currency_code:
+            type: string
+            default: RUB
+            enum: [RUB, USD, EUR, <see extDoc>]
+
+    Dimensions:
+      type: object
+      nullable: true      
+      description: >+
+        Физические размеры объекта поиска по данным продавца
+      properties:
+        length:
+          type: number
+          minimum: 0
+          description: Длина / Глубина
+        width:
+          type: number
+          minimum: 0
+          description: Ширина
+        height:
+          type: number
+          minimum: 0
+          description: Высота
+        unit:
+          type: string
+          description: Единица измерения - указывается по данным поставщика. Нормализация не применяется.
+
+  securitySchemes:
+    bearerAuth:
+      description: >+
+        Токен авторизации конкретного запроса.
+        Должен однозначно указывать на конкретного сервис-партнера и конкретного пользователя (организацию)
+        авторизованного для выполнения данного запроса.
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
