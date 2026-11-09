@@ -408,13 +408,13 @@ components:
           default: None
           enum:
             # TODO: Согласовать с другой стороной
-            [None, Unknown, Bad Pattern, Bad Address, Bad Filters]
-            # Вариант интрпретации:
+            [NONE, Unknown, Bad_Pattern, Bad_Address, Bad_Filters]
+            # Вариант интерпретации:
             #        None: Запрос валиден, ошибок нет
             #     Unknown: Запрос отклонен, причина ошибки не определена.
-            # Bad Pattern: Запрос отклонен, некоррректная строка поиска
-            # Bad Address: Запрос отклонен, некорректный адрес
-            # Bad Filters: Запрос отклонен, некорректно сформирован фильтр запроса.
+            # Bad_Pattern: Запрос отклонен, некорректная строка поиска
+            # Bad_Address: Запрос отклонен, некорректный адрес
+            # Bad_Filters: Запрос отклонен, некорректно сформирован фильтр запроса.
             #
             # Ошибка может быть детализирована в поле [description]
         search_result:
@@ -724,7 +724,6 @@ components:
             Максимально допустимый срок доставки (в днях)
           nullable: true
           minimum: 0
-          default: 0
         supplier_name:
           type: string
           description: Название поставщика по данным источника
@@ -754,16 +753,12 @@ components:
           nullable: false
           type: "string"
           description: >+
-            Адрес доставки. Для одного заказа может быть указан только один адрес.
-            Обязательный параметр.
-            Если текст параметра не может быть валидирован как адрес,
-            то запрос будет отклонен с ошибкой 400.
+            Адрес доставки.
         delivery_time:
           description: >+
             Максимально допустимый срок доставки (в днях)
           nullable: true
           minimum: 0
-          default: 0
           type: integer
         product:
           $ref: "#/components/schemas/ProductCard"
@@ -833,15 +828,15 @@ components:
         order_status:
           description: >+
             Статус запроса на создание заказа. Этот статус отправляется в синхронном режиме,
-            т.е. запросившая стороны всегда получает информацию о данном статусе сиинхронно 
+            т.е. запросившая сторона всегда получает информацию о данном статусе сиинхронно 
             с запросом.
           type: string
           default: Created
-          enum: 
+          enum:
             # TODO: Согласовать с другой стороной
-            [Decilned, Created]
+            [Declined, Created]
             # Варианты интерпретации:
-            # Decilned: Запрос отклонен, см. [error_code]
+            # Declined: Запрос отклонен, см. [error_code]
             #  Created: Запрос принят и находится в обработка. Дальнейшая работа по заказу [order_id] 
             #           производится вне данного API
 
@@ -852,12 +847,12 @@ components:
           default: None
           enum:
             # TODO: Согласовать с другой стороной
-            [None, Unknown, Bad Address, Bad Product, Expired]
-            # Вариант интрпретации:
+            [NONE, Unknown, Bad_Address, Bad_Product, Expired]
+            # Вариант интерпретации:
             #        None: Запрос валиден, ошибок нет
             #     Unknown: Запрос отклонен, причина ошибки не определена.
-            # Bad Address: Запрос отклонен, некорректный адрес
-            # Bad Product: Запрос отклонен, объект [ProductCard] не распознается на стороне V.Market.
+            # Bad_Address: Запрос отклонен, некорректный адрес
+            # Bad_Product: Запрос отклонен, объект [ProductCard] не распознается на стороне V.Market.
             #     Expired: Запрос отклонен, объект [ProductCard] не найден или потерял актуальность.
             #
             # Ошибка может быть детализирована в поле [description]
@@ -881,10 +876,10 @@ components:
       required:
         - currency_code
       properties:
-          currency_code:
-            type: string
-            default: RUB
-            enum: [RUB, USD, EUR, <see extDoc>]
+        currency_code:
+          type: string
+          default: RUB
+          enum: [RUB, USD, EUR, <see extDoc>]
 
     Dimensions:
       type: object
