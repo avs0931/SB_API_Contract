@@ -1,3 +1,4 @@
+
 openapi: 3.0.0
 info:
   description: Proposal for Sber/VM API
@@ -237,7 +238,7 @@ paths:
             schema:
               $ref: "#/components/schemas/OrderRequestBody"
       responses:
-        "200":
+        "202":
           description: Заказ создан успешно
           content:
             application/json:
@@ -265,6 +266,14 @@ paths:
               schema:
                 $ref: "#/components/schemas/OrderResponse"
 
+        "408":
+          description: Request Timeout - Превышено предельное время обработки запроса на
+            стороне VM
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderResponse"
+
         "410":
           description: "Ordered products not found or expired"
           content:
@@ -286,7 +295,20 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/OrderResponse"
-
+        "500":
+          description: "Internal Service Error - ALERT: Ошибка сервера
+            (неидентифицированная)"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderResponse"
+        "501":
+          description: Not Implemented - Запрос данного типа или в данной конфигурации не
+            поддерживается
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderResponse"
         "503":
           description: >+
            Service Unavailable
@@ -323,7 +345,7 @@ components:
           nullable: false
           type: "string"
           format: date-time
-          description: "ISO 8601 (Z) - Метка времени создания запроса на стороне отправителя"
+          description: "ISO 8601 (UTC/Z) - Метка времени создания запроса на стороне отправителя"
           
     # General search request parameters
     SearchRequestBody:
@@ -342,7 +364,7 @@ components:
     SearchResponse:
       type: object
       description: >+
-        Объект [ответ] сервера VM на внешний запрос. Типовой ответ для всех эндпоинтов API.
+        Объект [ответ] сервера VM на внешний запрос. Типовой ответ для всех эндпоинтов SEARCH.
       required:
         - request_context
         - description
@@ -356,7 +378,7 @@ components:
         answer_timestamp:
           type: string
           format: date-time
-          description: Метка времени ISO-8601 (timezone!) создания ответа на стороне VM
+          description: Метка времени ISO-8601 (UTC/Z) создания ответа на стороне VM
         search_id:
           type: string
           nullable: true
@@ -374,10 +396,18 @@ components:
             NONE - поисковый запрос не запущен
             RUNNING - поисковый запрос выполняется
             DONE - поисковый запрос завершен. Доступны результаты.
-            CANCELLED - поисковый запрос остановлен по запросу внешней системы. Результаты недоступны.
+            CANCELLED - поисковый запрос остановлен по запросу внешней системы. Если результаты есть, то они доступны в ответе.
             ERROR - поисковый запрос прерван из-за ошибки на стороне выполнения. Результаты недоступны.
           default: NONE
           enum: [NONE, RUNNING, DONE, CANCELLED, ERROR]
+        error_code:
+          type: string
+          nullable: false
+          description: Перечисление кодов ошибок, которые должны отрабатываться на стороне получателя.
+          default: None
+          enum:
+            # TODO: Согласовать с другой стороной
+            [None, Unknown, Bad Pattern, Bad Address, Bad Filters]
         search_result:
           description: Контейнер с доступными результатами выполнения поискового запроса.
           $ref: "#/components/schemas/SearchResult"
@@ -464,12 +494,12 @@ components:
           nullable: false
           default: Unknown
           enum:
-            [Unknown, Low, Moderate, High]
+            [Undefined, Low, Moderate, High]
           # Интерпретация значений по 5-ти балльной шкале:
-          #  Unknown: Значение неизвестно, количественная оценка отсутствует или недоступна
+          #  Undefined: Значение неизвестно, количественная оценка отсутствует или недоступна
           #      Low: 0 < platform_value <= 2
           # Moderate: 2 < platform_value <= 4
-          #     High: 4 < platform_value
+          #     High: 4 > platform_value
         supplier_rank:
           description: >+
             Рейтинг поставщика.
@@ -477,7 +507,7 @@ components:
           nullable: true
           default: Unknown
           enum:
-            [Unknown, Low, Moderate, High]
+            [Undefined, Low, Moderate, High]
           # Интерпретация значений по 5-ти балльной шкале: см. выше.
         manufacturer_rank:
           description: >+
@@ -486,7 +516,7 @@ components:
           nullable: true
           default: Unknown
           enum:
-            [Unknown, Low, Moderate, High]
+            [Undefined, Low, Moderate, High]
           # Интерпретация значений по 5-ти балльной шкале: см. выше.
         brands:
           description: >+
@@ -505,12 +535,11 @@ components:
         oem_allowed:
           description: >+
             Допускается продукция OEM/NONAME производителей.
-            При значении TURE допускается только оригинальная продукция от производителей, указанных
+            При значении FALSE допускается только оригинальная продукция от производителей, указанных
             в списке `manufacturers`.
           type: boolean
-          default: true
+          default: TRUE
           nullable: true
-          minimum: 0
         min_price:
           description: >+
             Минимально допустимая цена
@@ -566,12 +595,12 @@ components:
           nullable: false
           default: Unknown
           enum:
-            [Unknown, Low, Moderate, High]
+            [Undefined, Low, Moderate, High]
           # Интерпретация значений по 5-ти балльной шкале:
-          #  Unknown: Значение неизвестно, количественная оценка отсутствует или недоступна
+          #  Undefined: Значение неизвестно, количественная оценка отсутствует или недоступна
           #      Low: 0 < platform_value <= 2
           # Moderate: 2 < platform_value <= 4
-          #     High: 4 < platform_value
+          #     High: 4 > platform_value
         product_description:
           description: Описание товара в стандартной структуре, применяется для любого товара в поисковой выдаче.
           $ref: "#/components/schemas/ProductDescription"
@@ -661,7 +690,7 @@ components:
         - price
         - currency
         - supplier_name
-        - product_url
+        - product_uri
       properties:
         offer_id:
           type: string
@@ -700,10 +729,22 @@ components:
         supplier_rating:
           type: number
           description: Рейтинг поставщика
-        product_url:
+        product_uri:
           type: string
           format: uri
+          nullable: true
           description: Ссылка на страницу товара в источнике
+
+    OrderCard:
+      description: Тело объекта ЗАКАЗ. Определяет - какую именно позицию и в каком количестве нужно заказать
+      type: object
+      properties:
+        quantity:
+          description: Количество товаров для заказа.
+          type: number
+          format: float
+        product:
+          $ref: "#/components/schemas/ProductCard"
 
     OrderRequestBody:
       description: Тело запроса на формирование заказа на закупку или подготовку коммерческого предложения
@@ -723,7 +764,7 @@ components:
             для формирования заказа.
           type: array
           items:
-            $ref: "#/components/schemas/ProductCard"
+            $ref: "#/components/schemas/OrderCard"
 
     # ORDER RESPONSE object
     OrderResponse:
@@ -746,7 +787,7 @@ components:
         answer_timestamp:
           type: string
           format: date-time
-          description: Метка времени ISO-8601 (timezone!) создания ответа на стороне VM
+          description: Метка времени ISO-8601 (UTC/Z) создания ответа на стороне VM
 
         search_id:
           type: string
@@ -778,7 +819,7 @@ components:
     Currencies:
       description: Валюта стоимостного показателя - трехбуквенный код в формате ISO 4217
       type: object
-      nullable: true
+      nullable: false
       externalDocs:
         description: Официальный источник ISO 4217:2015 / XML, XLS
         url: https://www.six-group.com/en/products-services/financial-information/market-reference-data/data-standards.html
