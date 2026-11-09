@@ -369,6 +369,7 @@ components:
         - request_context
         - description
         - answer_timestamp
+        - error_code
       properties:
         request_context:
           $ref: "#/components/schemas/RequestContext"
@@ -408,8 +409,16 @@ components:
           enum:
             # TODO: Согласовать с другой стороной
             [None, Unknown, Bad Pattern, Bad Address, Bad Filters]
+            # Вариант интрпретации:
+            #        None: Запрос валиден, ошибок нет
+            #     Unknown: Запрос отклонен, причина ошибки не определена.
+            # Bad Pattern: Запрос отклонен, некоррректная строка поиска
+            # Bad Address: Запрос отклонен, некорректный адрес
+            # Bad Filters: Запрос отклонен, некорректно сформирован фильтр запроса.
+            #
+            # Ошибка может быть детализирована в поле [description]
         search_result:
-          description: Контейнер с доступными результатами выполнения поискового запроса.
+          # Контейнер с доступными результатами выполнения поискового запроса.
           $ref: "#/components/schemas/SearchResult"
        
     # CONTAINER: Result of search
@@ -419,7 +428,7 @@ components:
       description: >+
         Контейнер с атрибутами поиска и массивом результатов обработки поискового запроса.
         При `search_status = RUNNING` может содержать частичный набор результатов 
-        При `search_status = DONE`` **может** содержать полный набор результатов,
+        При `search_status = DONE` **может** содержать полный набор результатов,
         если результаты доступны
       required:
         - query_params
@@ -460,8 +469,8 @@ components:
           description: >+
             Адрес доставки.
             Обязательный параметр.
-            Если текст поискового запроса не может быть валидирован как адрес,
-            то такой запрос будет отклонен с ошибкой 400.
+            Если текст параметра не может быть валидирован как адрес,
+            то запрос будет отклонен с ошибкой 400.
         query_filters:
           nullable: true
           type: object
@@ -492,18 +501,21 @@ components:
             Рейтинг товара по мнению пользователей (покупателей).
           type: number
           nullable: true
+          default: 0
           minimum: 0
         supplier_rank:
           description: >+
             Рейтинг поставщика.
           type: number
           nullable: true
+          default: 0
           minimum: 0
         manufacturer_rank:
           description: >+
             Рейтинг изготовителя.
           type: number
           nullable: true
+          default: 0
           minimum: 0
         brands:
           description: >+
@@ -525,7 +537,7 @@ components:
             При значении FALSE допускается только оригинальная продукция от производителей, указанных
             в списке `manufacturers`.
           type: boolean
-          default: TRUE
+          default: true
           nullable: true
         min_price:
           description: >+
@@ -552,9 +564,10 @@ components:
         delivery_time:
           description: >+
             Максимально допустимый срок доставки (в днях)
+          type: integer
           nullable: true
           minimum: 0
-          type: integer
+          default: 0
 
     ProductCard:
       type: object
@@ -580,13 +593,14 @@ components:
             Рейтинг товара по мнению пользователей.
           type: number
           nullable: true
+          default: 0
           minimum: 0
         product_description:
-          description: Описание товара в стандартной структуре, применяется для любого товара в поисковой выдаче.
+          # Описание товара в стандартной структуре, применяется для любого товара в поисковой выдаче.
           $ref: "#/components/schemas/ProductDescription"
         characteristics:
+          # Список характеристик товара, формируется динамически для конкретного результата в поиске.
           type: array
-          description: Список характеристик товара, формируется динамически для конкретного результата в поиске.
           items:
             $ref: "#/components/schemas/Characteristics"
         offers:
@@ -614,28 +628,33 @@ components:
           default: 0
           description: Минимальная цена
         max_price:
+          description: Максимальная цена
           type: number
           minimum: 0
           default: 0
-          description: Максимальная цена
         manufacturer:
-          type: string
           description: Производитель/бренд
+          type: string
+          nullable: true
         dimensions:
           $ref: "#/components/schemas/Dimensions"
         article:
-          type: string
           description: Артикул - код товара по данным поставщика, представленного в данной карточке товара.
+          type: string
+          nullable: true
         line:
-          type: string
           description: Линейка товаров по данным поставщика, представленного в данной карточке товара.
-        variant:
           type: string
+          nullable: true
+        variant:
           description: Опции товара / исполнения по данным поставщика, представленного в данной карточке товара.
-        image_url:
+          type: string
+          nullable: true
+        image_uri:
+          description: Ссылка на картинку товара по данным поставщика, представленного в данной карточке товара.
           type: string
           format: uri
-          description: Ссылка на картинку товара по данным поставщика, представленного в данной карточке товара.
+          nullable: true
     
     Characteristics:
       type: object
@@ -701,8 +720,11 @@ components:
         delivery_currency:
           $ref: "#/components/schemas/Currencies"
         delivery_time:
-          type: string
-          description: Срок доставки (текст, например "2-3 рабочих дня")
+          description: >+
+            Максимально допустимый срок доставки (в днях)
+          nullable: true
+          minimum: 0
+          default: 0
         supplier_name:
           type: string
           description: Название поставщика по данным источника
@@ -712,17 +734,37 @@ components:
         product_uri:
           type: string
           format: uri
-          nullable: true
+          nullable: false
           description: Ссылка на страницу товара в источнике
 
     OrderCard:
       description: Тело объекта ЗАКАЗ. Определяет - какую именно позицию и в каком количестве нужно заказать
       type: object
+      required:
+        - quantity
+        - product
       properties:
         quantity:
           description: Количество товаров для заказа.
           type: number
+          minimum: 0
+          exclusiveMinimum: true
           format: float
+        delivery_address:
+          nullable: false
+          type: "string"
+          description: >+
+            Адрес доставки. Для одного заказа может быть указан только один адрес.
+            Обязательный параметр.
+            Если текст параметра не может быть валидирован как адрес,
+            то запрос будет отклонен с ошибкой 400.
+        delivery_time:
+          description: >+
+            Максимально допустимый срок доставки (в днях)
+          nullable: true
+          minimum: 0
+          default: 0
+          type: integer
         product:
           $ref: "#/components/schemas/ProductCard"
 
@@ -739,9 +781,9 @@ components:
           description: Идентификатор завершенного поискового запроса
         selected_items:
           description: >+
-            Массив объектов `ProductCard` (т.е. полное описание товара, включая предложения,
-            доступные для данного товара в поиске), отобранных на стороне внешней системы
-            для формирования заказа.
+            Массив объектов `OrderCard` (т.е. полное описание товара, и количество для заказа.
+            Содержит предложения по данному товару в результатах поиска, 
+            отобранные на стороне внешней системы для формирования заказа.
           type: array
           items:
             $ref: "#/components/schemas/OrderCard"
@@ -756,6 +798,7 @@ components:
         - description
         - answer_timestamp
         - search_id
+        - error_code
       properties:
         request_context:
           $ref: "#/components/schemas/RequestContext"
@@ -786,6 +829,38 @@ components:
           type: string
           nullable: true
           format: "uuid"
+
+        order_status:
+          description: >+
+            Статус запроса на создание заказа. Этот статус отправляется в синхронном режиме,
+            т.е. запросившая стороны всегда получает информацию о данном статусе сиинхронно 
+            с запросом.
+          type: string
+          default: Created
+          enum: 
+            # TODO: Согласовать с другой стороной
+            [Decilned, Created]
+            # Варианты интерпретации:
+            # Decilned: Запрос отклонен, см. [error_code]
+            #  Created: Запрос принят и находится в обработка. Дальнейшая работа по заказу [order_id] 
+            #           производится вне данного API
+
+        error_code:
+          type: string
+          nullable: false
+          description: Перечисление кодов ошибок, которые должны отрабатываться на стороне получателя.
+          default: None
+          enum:
+            # TODO: Согласовать с другой стороной
+            [None, Unknown, Bad Address, Bad Product, Expired]
+            # Вариант интрпретации:
+            #        None: Запрос валиден, ошибок нет
+            #     Unknown: Запрос отклонен, причина ошибки не определена.
+            # Bad Address: Запрос отклонен, некорректный адрес
+            # Bad Product: Запрос отклонен, объект [ProductCard] не распознается на стороне V.Market.
+            #     Expired: Запрос отклонен, объект [ProductCard] не найден или потерял актуальность.
+            #
+            # Ошибка может быть детализирована в поле [description]
 
         error_items:
           description: >+
@@ -837,7 +912,7 @@ components:
     bearerAuth:
       description: >+
         Токен авторизации конкретного запроса.
-        Должен однозначно указывать на конкретного сервис-партнера и конкретного пользователя (организацию)
+        Должен однозначно указывать на конкретного сервис-партнера и конкретного пользователя или организацию
         авторизованного для выполнения данного запроса.
       type: http
       scheme: bearer
