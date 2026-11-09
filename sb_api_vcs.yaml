@@ -1,13 +1,13 @@
 
 openapi: 3.0.0
 info:
-  description: Proposal for Sber/VM API
-  version: 0.0.1a
+  description: Proposal for Sber/VM API (To be Discussed)
+  version: 0.0.1
   title: Sber/VM API Draft
   contact:
     email: aa.vasilyev@etpgpb.ru
 servers:
-  - url: "https://127.0.0.1/v01"
+  - url: "https://{host}/01"
 paths:
   /search:
     post:
@@ -40,7 +40,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/SearchResponse"
         "401":
-          description: Unauthorized - Запрос не авторизован на стороне VM
+          description: Not Authorized - Запрос не авторизован на стороне VM
           content:
             application/json:
               schema:
@@ -229,7 +229,7 @@ paths:
       operationId: createPurchaseOrder
       requestBody:
         description: >+
-          Тело запроса на создание заказа / коммерческого предложение.
+          Тело запроса на создание заказа / коммерческого предложения.
           В данном вызове выполняется только создание такого заказа и возвращается его идентификатор.
           Обработка запроса выполняется асинхронно другим сервисом.
         required: true
@@ -331,7 +331,7 @@ components:
       type: object
       description: >+
         Контекст запроса, полученный от внешнего клиента.
-        Никогда не изменяется в ходе обработки заапроса.
+        Никогда не изменяется в ходе обработки запроса.
       required:
         - request_id
         - request_timestamp
@@ -452,13 +452,13 @@ components:
           description: >+
             Тело (текст / образец) поискового запроса в свободной форме.
             Обязательный параметр.
-            Если текст поискового запроса не может быть опознан как содержательный текст,
+            Если текст запроса на создание заказа не может быть опознан как содержательный текст,
             то такой запрос будет отклонен с ошибкой 400.
         delivery_address:
           nullable: false
           type: "string"
           description: >+
-            "Адрес доставки"
+            Адрес доставки.
             Обязательный параметр.
             Если текст поискового запроса не может быть валидирован как адрес,
             то такой запрос будет отклонен с ошибкой 400.
