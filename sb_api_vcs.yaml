@@ -490,34 +490,21 @@ components:
         user_rank:
           description: >+
             Рейтинг товара по мнению пользователей (покупателей).
-          type: string
-          nullable: false
-          default: Unknown
-          enum:
-            [Undefined, Low, Moderate, High]
-          # Интерпретация значений по 5-ти балльной шкале:
-          #  Undefined: Значение неизвестно, количественная оценка отсутствует или недоступна
-          #      Low: 0 < platform_value <= 2
-          # Moderate: 2 < platform_value <= 4
-          #     High: 4 > platform_value
+          type: number
+          nullable: true
+          minimum: 0
         supplier_rank:
           description: >+
             Рейтинг поставщика.
-          type: string
+          type: number
           nullable: true
-          default: Unknown
-          enum:
-            [Undefined, Low, Moderate, High]
-          # Интерпретация значений по 5-ти балльной шкале: см. выше.
+          minimum: 0
         manufacturer_rank:
           description: >+
             Рейтинг изготовителя.
-          type: string
+          type: number
           nullable: true
-          default: Unknown
-          enum:
-            [Undefined, Low, Moderate, High]
-          # Интерпретация значений по 5-ти балльной шкале: см. выше.
+          minimum: 0
         brands:
           description: >+
             Список предпочительных брендов / торговых марок товара
@@ -591,16 +578,9 @@ components:
         rank:
           description: >+
             Рейтинг товара по мнению пользователей.
-          type: string
-          nullable: false
-          default: Unknown
-          enum:
-            [Undefined, Low, Moderate, High]
-          # Интерпретация значений по 5-ти балльной шкале:
-          #  Undefined: Значение неизвестно, количественная оценка отсутствует или недоступна
-          #      Low: 0 < platform_value <= 2
-          # Moderate: 2 < platform_value <= 4
-          #     High: 4 > platform_value
+          type: number
+          nullable: true
+          minimum: 0
         product_description:
           description: Описание товара в стандартной структуре, применяется для любого товара в поисковой выдаче.
           $ref: "#/components/schemas/ProductDescription"
