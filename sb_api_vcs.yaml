@@ -7,7 +7,10 @@ info:
   contact:
     email: aa.vasilyev@etpgpb.ru
 servers:
-  - url: "https://{host}/01"
+  - url: "https://api-test.market-navi.ru/v1"
+security:
+  - bearerAuth: []
+
 paths:
   /search:
     post:
@@ -16,8 +19,9 @@ paths:
 
       summary: Processing external search request
       description: >+
-        (**SYNC - синхронный**)
-        Обработка поискового запроса по параметрам, полученным от внешней системы
+        Синхронно выполняется только приём поискового запроса от внешней системы.
+        Ответ 202 означает, что запрос принят; сам поиск выполняется асинхронно.
+        Текущее состояние и результаты доступны через GET /search/{search_id}.
       operationId: createSearch
       requestBody:
         content:
@@ -38,27 +42,26 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SearchResponse"
+                $ref: "#/components/schemas/ErrorResponse"
         "401":
           description: Not Authorized - Запрос не авторизован на стороне VM
+          headers:
+            WWW-Authenticate:
+              description: Bearer challenge для авторизации запроса.
+              schema:
+                type: string
+                example: Bearer
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SearchResponse"
+                $ref: "#/components/schemas/ErrorResponse"
        
         "403":
           description: Forbidden - Выполнение запроса запрещено на стороне VM
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SearchResponse"
-        "408":
-          description: Request Timeout - Превышено предельное время обработки запроса на
-            стороне VM
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SearchResponse"
+                $ref: "#/components/schemas/ErrorResponse"
         "429":
           description: Too Many Requests - Превышен [rate limit] (для данного пользователя)
             или [service limit] (для данной организации)
@@ -72,21 +75,21 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SearchResponse"
+                $ref: "#/components/schemas/ErrorResponse"
         "500":
           description: "Internal Service Error - ALERT: Ошибка сервера
             (неидентифицированная)"
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SearchResponse"
+                $ref: "#/components/schemas/ErrorResponse"
         "501":
           description: Not Implemented - Запрос данного типа или в данной конфигурации не
             поддерживается
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SearchResponse"
+                $ref: "#/components/schemas/ErrorResponse"
         "503":
           description: "Service unavailable - ALERT: Сервис поиска временно недоступен"
           headers:
@@ -99,7 +102,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SearchResponse"
+                $ref: "#/components/schemas/ErrorResponse"
 
   /search/{search_id}:
     get:
@@ -110,9 +113,11 @@ paths:
       description: >+
         (**SYNC - синхронный**)
         Возвращает текущее состояние (`search_status`) и результаты поиска, если они доступны.
-        До завершения обработки запроса (`search_status = RUNNING`) возвращается только статус и
-        текущие результаты выполнения поискового запроса, если они доступны.
-        По завершении обработки (`search_status = DONE`) доступны результаты поиска.
+        Каждый ответ содержит полный список результатов, доступных на момент формирования ответа,
+        если результаты доступны. Это полный снимок, а не изменения относительно предыдущего ответа:
+        клиент заменяет ранее полученный список текущим.
+        При `search_status = RUNNING` список включает все результаты, найденные к этому моменту.
+        По завершении обработки (`search_status = DONE`) доступны итоговые результаты поиска.
       operationId: getSearchState
       parameters:
         - name: search_id
@@ -136,10 +141,16 @@ paths:
             
         "401":
           description: Not Authorized - Токен недействителен
+          headers:
+            WWW-Authenticate:
+              description: Bearer challenge для авторизации запроса.
+              schema:
+                type: string
+                example: Bearer
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SearchResponse"
+                $ref: "#/components/schemas/ErrorResponse"
            
         "404":
           description: SEARCH NOT FOUND - Поиск не найден либо создан для другой внешней
@@ -147,7 +158,14 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SearchResponse"
+                $ref: "#/components/schemas/ErrorResponse"
+
+        "410":
+          description: Gone - Срок доступности поисковой сессии или её результатов истёк (expires_at).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
         "429":
           description: >+
@@ -162,7 +180,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SearchResponse"
+                $ref: "#/components/schemas/ErrorResponse"
   
     delete:
       security:
@@ -173,8 +191,8 @@ paths:
         (**SYNC - синхронный**)
         Остановка поискового запроса на стороне VM.
         Объект `Response` содержит значение `search_status = CANCELLED`.
-        Может содержать результаты выполнения поискового запроса, 
-        доступные на момент прекращения обработки.
+        Может содержать полный список результатов выполнения поискового запроса,
+        доступных на момент прекращения обработки.
       operationId: cancelSearch
       parameters:
         - name: search_id
@@ -196,17 +214,23 @@ paths:
 
         "401":
           description: "Not Authorized - Токен недействителен"
+          headers:
+            WWW-Authenticate:
+              description: Bearer challenge для авторизации запроса.
+              schema:
+                type: string
+                example: Bearer
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SearchResponse"
+                $ref: "#/components/schemas/ErrorResponse"
 
         "404":
           description: "SEARCH NOT FOUND - Поиск не найден"
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SearchResponse"
+                $ref: "#/components/schemas/ErrorResponse"
 
         "409":
           description: >+
@@ -215,7 +239,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SearchResponse"
+                $ref: "#/components/schemas/ErrorResponse"
   /order:
     post:
       security:
@@ -250,36 +274,34 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/OrderResponse"
+                $ref: "#/components/schemas/ErrorResponse"
 
         "401":
           description: "Not Authorized - Токен недействителен"
+          headers:
+            WWW-Authenticate:
+              description: Bearer challenge для авторизации запроса.
+              schema:
+                type: string
+                example: Bearer
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/OrderResponse"
+                $ref: "#/components/schemas/ErrorResponse"
 
         "404":
           description: "Search Request not found or search results expired"
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/OrderResponse"
-
-        "408":
-          description: Request Timeout - Превышено предельное время обработки запроса на
-            стороне VM
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/OrderResponse"
+                $ref: "#/components/schemas/ErrorResponse"
 
         "410":
           description: "Ordered products not found or expired"
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/OrderResponse"
+                $ref: "#/components/schemas/ErrorResponse"
 
         "429":
           description: >+
@@ -294,21 +316,21 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/OrderResponse"
+                $ref: "#/components/schemas/ErrorResponse"
         "500":
           description: "Internal Service Error - ALERT: Ошибка сервера
             (неидентифицированная)"
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/OrderResponse"
+                $ref: "#/components/schemas/ErrorResponse"
         "501":
           description: Not Implemented - Запрос данного типа или в данной конфигурации не
             поддерживается
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/OrderResponse"
+                $ref: "#/components/schemas/ErrorResponse"
         "503":
           description: >+
            Service Unavailable
@@ -322,7 +344,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/OrderResponse"
+                $ref: "#/components/schemas/ErrorResponse"
 
 components:
   schemas:
@@ -364,22 +386,30 @@ components:
     SearchResponse:
       type: object
       description: >+
-        Объект [ответ] сервера VM на внешний запрос. Типовой ответ для всех эндпоинтов SEARCH.
+        Объект успешного ответа сервера VM для эндпоинтов SEARCH.
+        Для HTTP-ошибок используется отдельная схема ErrorResponse.
       required:
         - request_context
         - description
-        - answer_timestamp
-        - error_code
+        - timestamp
+        - expires_at
       properties:
         request_context:
           $ref: "#/components/schemas/RequestContext"
         description:
           type: string
           description: Расширенное описание статуса ответа VM
-        answer_timestamp:
+        timestamp:
           type: string
           format: date-time
           description: Метка времени ISO-8601 (UTC/Z) создания ответа на стороне VM
+        expires_at:
+          type: string
+          format: date-time
+          description: >+
+            Метка времени ISO-8601 (UTC/Z), до которой доступны данные поисковой сессии.
+            Равна timestamp текущего ответа плюс 24 часа.
+            При каждом успешном ответе SEARCH срок доступности обновляется.
         search_id:
           type: string
           nullable: true
@@ -401,35 +431,55 @@ components:
             ERROR - поисковый запрос прерван из-за ошибки на стороне выполнения. Результаты недоступны.
           default: NONE
           enum: [NONE, RUNNING, DONE, CANCELLED, ERROR]
-        error_code:
-          type: string
-          nullable: false
-          description: Перечисление кодов ошибок, которые должны отрабатываться на стороне получателя.
-          default: None
-          enum:
-            # TODO: Согласовать с другой стороной
-            [NONE, Unknown, Bad_Pattern, Bad_Address, Bad_Filters]
-            # Вариант интерпретации:
-            #        None: Запрос валиден, ошибок нет
-            #     Unknown: Запрос отклонен, причина ошибки не определена.
-            # Bad_Pattern: Запрос отклонен, некорректная строка поиска
-            # Bad_Address: Запрос отклонен, некорректный адрес
-            # Bad_Filters: Запрос отклонен, некорректно сформирован фильтр запроса.
-            #
-            # Ошибка может быть детализирована в поле [description]
         search_result:
           # Контейнер с доступными результатами выполнения поискового запроса.
           $ref: "#/components/schemas/SearchResult"
        
+    ErrorResponse:
+      type: object
+      description: Единый формат ответа для всех HTTP-ошибок API.
+      required:
+        - error
+        - message
+        - timestamp
+      properties:
+        error:
+          type: string
+          description: Машиночитаемый код ошибки.
+        message:
+          type: string
+          description: Описание ошибки.
+        request_context:
+          type: object
+          description: Контекст запроса, если идентификатор запроса удалось получить.
+          properties:
+            request_id:
+              type: string
+              description: Идентификатор запроса со стороны отправителя, если он доступен.
+        params:
+          type: string
+          description: Дополнительные параметры ошибки, если они доступны.
+        timestamp:
+          type: string
+          format: date-time
+          description: Метка времени ISO-8601 (UTC/Z) создания ответа с ошибкой.
+      example:
+        error: string
+        message: string
+        request_context:
+          request_id: string
+        params: string
+        timestamp: "2026-11-09T10:07:20.666Z"
+
     # CONTAINER: Result of search
     SearchResult:
       type: object
-      # Вариант: с возратом результатов по мере выполнения поиска!
       description: >+
         Контейнер с атрибутами поиска и массивом результатов обработки поискового запроса.
-        При `search_status = RUNNING` может содержать частичный набор результатов 
-        При `search_status = DONE` **может** содержать полный набор результатов,
-        если результаты доступны
+        Каждый ответ содержит полный список результатов, доступных на момент формирования ответа.
+        При `search_status = RUNNING` это все результаты, найденные к текущему моменту,
+        а не только новые результаты с момента предыдущего ответа.
+        При `search_status = DONE` содержит итоговый список, если результаты доступны.
       required:
         - query_params
         - items_count
@@ -562,12 +612,18 @@ components:
         delivery_currency:
           $ref: "#/components/schemas/Currencies"
         delivery_time:
-          description: >+
-            Максимально допустимый срок доставки (в днях)
-          type: integer
+          description: |
+            Желаемый срок доставки для фильтрации результатов поиска:
+            - today — сегодня;
+            - tomorrow — завтра;
+            - from_1_hour — от 1 часа;
+            - up_to_3_days — до 3 дней;
+            - up_to_5_days — до 5 дней;
+            - up_to_12_days — до 12 дней.
+            При отсутствии параметра или null ограничение срока доставки не задаётся.
+          type: string
           nullable: true
-          minimum: 0
-          default: 0
+          enum: [today, tomorrow, from_1_hour, up_to_3_days, up_to_5_days, up_to_12_days, null]
 
     ProductCard:
       type: object
@@ -650,11 +706,13 @@ components:
           description: Опции товара / исполнения по данным поставщика, представленного в данной карточке товара.
           type: string
           nullable: true
-        image_uri:
-          description: Ссылка на картинку товара по данным поставщика, представленного в данной карточке товара.
-          type: string
-          format: uri
+        images:
+          description: Ссылки на изображения товара по данным поставщика.
+          type: array
           nullable: true
+          items:
+            type: string
+            format: uri
     
     Characteristics:
       type: object
@@ -688,7 +746,6 @@ components:
         - source_product_name
         - price
         - currency
-        - supplier_name
         - product_uri
       properties:
         offer_id:
@@ -720,16 +777,23 @@ components:
         delivery_currency:
           $ref: "#/components/schemas/Currencies"
         delivery_time:
-          description: >+
-            Максимально допустимый срок доставки (в днях)
+          description: Предполагаемая дата доставки в формате YYYY-MM-DD, без часового пояса.
+          type: string
+          format: date
           nullable: true
-          minimum: 0
         supplier_name:
           type: string
+          nullable: true
           description: Название поставщика по данным источника
         supplier_rating:
           type: number
           description: Рейтинг поставщика
+        images:
+          description: Ссылки на изображения товара в источнике предложения.
+          type: array
+          items:
+            type: string
+            format: uri
         product_uri:
           type: string
           format: uri
@@ -755,11 +819,10 @@ components:
           description: >+
             Адрес доставки.
         delivery_time:
-          description: >+
-            Максимально допустимый срок доставки (в днях)
+          description: Предполагаемая дата доставки в формате YYYY-MM-DD, без часового пояса.
+          type: string
+          format: date
           nullable: true
-          minimum: 0
-          type: integer
         product:
           $ref: "#/components/schemas/ProductCard"
 
@@ -791,9 +854,8 @@ components:
       required:
         - request_context
         - description
-        - answer_timestamp
+        - timestamp
         - search_id
-        - error_code
       properties:
         request_context:
           $ref: "#/components/schemas/RequestContext"
@@ -802,7 +864,7 @@ components:
           type: string
           description: Расширенное описание статуса ответа VM
 
-        answer_timestamp:
+        timestamp:
           type: string
           format: date-time
           description: Метка времени ISO-8601 (UTC/Z) создания ответа на стороне VM
@@ -836,35 +898,10 @@ components:
             # TODO: Согласовать с другой стороной
             [Declined, Created]
             # Варианты интерпретации:
-            # Declined: Запрос отклонен, см. [error_code]
+            # Declined: Запрос отклонен; ошибки API описаны схемой ErrorResponse.
             #  Created: Запрос принят и находится в обработка. Дальнейшая работа по заказу [order_id] 
             #           производится вне данного API
 
-        error_code:
-          type: string
-          nullable: false
-          description: Перечисление кодов ошибок, которые должны отрабатываться на стороне получателя.
-          default: None
-          enum:
-            # TODO: Согласовать с другой стороной
-            [NONE, Unknown, Bad_Address, Bad_Product, Expired]
-            # Вариант интерпретации:
-            #        None: Запрос валиден, ошибок нет
-            #     Unknown: Запрос отклонен, причина ошибки не определена.
-            # Bad_Address: Запрос отклонен, некорректный адрес
-            # Bad_Product: Запрос отклонен, объект [ProductCard] не распознается на стороне V.Market.
-            #     Expired: Запрос отклонен, объект [ProductCard] не найден или потерял актуальность.
-            #
-            # Ошибка может быть детализирована в поле [description]
-
-        error_items:
-          description: >+
-            Массив объектов `ProductCard` (т.е. полное описание товара), 
-            при обработке которых возникли ошибки.
-          nullable: true
-          type: array
-          items:
-            $ref: "#/components/schemas/ProductCard"
 
     Currencies:
       description: Валюта стоимостного показателя - трехбуквенный код в формате ISO 4217
@@ -874,9 +911,9 @@ components:
         description: Официальный источник ISO 4217:2015 / XML, XLS
         url: https://www.six-group.com/en/products-services/financial-information/market-reference-data/data-standards.html
       required:
-        - currency_code
+        - code
       properties:
-        currency_code:
+        code:
           type: string
           default: RUB
           enum: [RUB, USD, EUR, <see extDoc>]
@@ -906,7 +943,8 @@ components:
   securitySchemes:
     bearerAuth:
       description: >+
-        Токен авторизации конкретного запроса.
+        Bearer-токен обязателен для всех запросов API.
+        Передаётся в заголовке Authorization: Bearer <token>.
         Должен однозначно указывать на конкретного сервис-партнера и конкретного пользователя или организацию
         авторизованного для выполнения данного запроса.
       type: http
