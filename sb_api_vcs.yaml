@@ -1,44 +1,54 @@
-
 openapi: 3.0.0
+
 info:
   description: Proposal for Sber/VM API (To be Discussed)
-  version: 0.0.1
+  version: 0.0.2
   title: Sber/VM API Draft
   contact:
     email: aa.vasilyev@etpgpb.ru
 servers:
-  - url: "https://api-test.market-navi.ru/v1"
+  - url: "https://api-test.market-navi.ru"
 security:
   - bearerAuth: []
 
 paths:
-  /search:
+  /search/v1/queries:
     post:
-      security:
-        - bearerAuth: [] 
-
       summary: Processing external search request
       description: >+
         Синхронно выполняется только приём поискового запроса от внешней системы.
         Ответ 202 означает, что запрос принят; сам поиск выполняется асинхронно.
-        Текущее состояние и результаты доступны через GET /search/{search_id}.
+        Текущее состояние и результаты доступны через GET /search/v1/queries/{id}.
       operationId: createSearch
+      parameters:
+        - $ref: "#/components/parameters/NaviContextRequestId"
+        - $ref: "#/components/parameters/NaviContextFlowId"
       requestBody:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/SearchRequestBody"
+              $ref: "#/components/schemas/SearchRequest"
         description: Search session parameters
         required: true
       responses:
         "202":
           description: Accepted - Запрос на поиск принят поисковой машиной
+          headers:
+            Navi-Context-Request-Id:
+              $ref: "#/components/headers/NaviContextRequestId"
+            Navi-Context-Flow-Id:
+              $ref: "#/components/headers/NaviContextFlowId"
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/SearchResponse"
         "400":
           description: Bad Request - Запрос на поиск имеет некорректный формат
+          headers:
+            Navi-Context-Request-Id:
+              $ref: "#/components/headers/NaviContextRequestId"
+            Navi-Context-Flow-Id:
+              $ref: "#/components/headers/NaviContextFlowId"
           content:
             application/json:
               schema:
@@ -51,13 +61,21 @@ paths:
               schema:
                 type: string
                 example: Bearer
+            Navi-Context-Request-Id:
+              $ref: "#/components/headers/NaviContextRequestId"
+            Navi-Context-Flow-Id:
+              $ref: "#/components/headers/NaviContextFlowId"
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-       
         "403":
           description: Forbidden - Выполнение запроса запрещено на стороне VM
+          headers:
+            Navi-Context-Request-Id:
+              $ref: "#/components/headers/NaviContextRequestId"
+            Navi-Context-Flow-Id:
+              $ref: "#/components/headers/NaviContextFlowId"
           content:
             application/json:
               schema:
@@ -72,20 +90,32 @@ paths:
                 minimum: 1
                 type: integer
                 example: 42
+            Navi-Context-Request-Id:
+              $ref: "#/components/headers/NaviContextRequestId"
+            Navi-Context-Flow-Id:
+              $ref: "#/components/headers/NaviContextFlowId"
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "500":
-          description: "Internal Service Error - ALERT: Ошибка сервера
-            (неидентифицированная)"
+          description: "Internal Service Error - ALERT: Ошибка сервера (неидентифицированная)"
+          headers:
+            Navi-Context-Request-Id:
+              $ref: "#/components/headers/NaviContextRequestId"
+            Navi-Context-Flow-Id:
+              $ref: "#/components/headers/NaviContextFlowId"
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "501":
-          description: Not Implemented - Запрос данного типа или в данной конфигурации не
-            поддерживается
+          description: Not Implemented - Запрос данного типа или в данной конфигурации не поддерживается
+          headers:
+            Navi-Context-Request-Id:
+              $ref: "#/components/headers/NaviContextRequestId"
+            Navi-Context-Flow-Id:
+              $ref: "#/components/headers/NaviContextFlowId"
           content:
             application/json:
               schema:
@@ -99,46 +129,47 @@ paths:
                 minimum: 1
                 type: integer
                 example: 120
+            Navi-Context-Request-Id:
+              $ref: "#/components/headers/NaviContextRequestId"
+            Navi-Context-Flow-Id:
+              $ref: "#/components/headers/NaviContextFlowId"
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
-  /search/{search_id}:
+  /search/v1/queries/{id}:
     get:
-      security:
-        - bearerAuth: [] 
-
       summary: Get search status and result
       description: >+
         (**SYNC - синхронный**)
-        Возвращает текущее состояние (`search_status`) и результаты поиска, если они доступны.
+        Возвращает текущее состояние (`status`) и результаты поиска, если они доступны.
         Каждый ответ содержит полный список результатов, доступных на момент формирования ответа,
         если результаты доступны. Это полный снимок, а не изменения относительно предыдущего ответа:
         клиент заменяет ранее полученный список текущим.
-        При `search_status = RUNNING` список включает все результаты, найденные к этому моменту.
-        По завершении обработки (`search_status = DONE`) доступны итоговые результаты поиска.
+        При `status = RUNNING` список включает все результаты, найденные к этому моменту.
+        По завершении обработки (`status = DONE`) доступны итоговые результаты поиска.
       operationId: getSearchState
       parameters:
-        - name: search_id
+        - name: id
           in: path
           description: >+
-            Уникальный код поисковой сессии на стороне VM. 
+            Уникальный код поисковой сессии на стороне VM.
             (из ответа 202 при запуске поиска)
           required: true
           schema:
             type: string
             format: uuid
       responses:
-
         "200":
-          description: SearchState - Поиск найден и принадлежит этой внешней
-            системе/пользователю
+          description: SearchState - Поиск найден и принадлежит этой внешней системе/пользователю
+          headers:
+            Navi-Context-Flow-Id:
+              $ref: "#/components/headers/NaviContextFlowId"
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/SearchResponse"
-            
         "401":
           description: Not Authorized - Токен недействителен
           headers:
@@ -147,29 +178,33 @@ paths:
               schema:
                 type: string
                 example: Bearer
+            Navi-Context-Flow-Id:
+              $ref: "#/components/headers/NaviContextFlowId"
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-           
         "404":
-          description: SEARCH NOT FOUND - Поиск не найден либо создан для другой внешней
-            системы/пользователя
+          description: SEARCH NOT FOUND - Поиск не найден либо создан для другой внешней системы/пользователя
+          headers:
+            Navi-Context-Flow-Id:
+              $ref: "#/components/headers/NaviContextFlowId"
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-
         "410":
           description: Gone - Срок доступности поисковой сессии или её результатов истёк (expires_at).
+          headers:
+            Navi-Context-Flow-Id:
+              $ref: "#/components/headers/NaviContextFlowId"
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-
         "429":
           description: >+
-           Too Many Requests - превышен лимит на количество запросов
+            Too Many Requests - превышен лимит на количество запросов
           headers:
             Retry-After:
               description: Период ожидания (в секундах) после которого можно повторить запрос.
@@ -177,41 +212,46 @@ paths:
                 minimum: 1
                 type: integer
                 example: 42
+            Navi-Context-Flow-Id:
+              $ref: "#/components/headers/NaviContextFlowId"
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  
-    delete:
-      security:
-        - bearerAuth: [] 
 
+    delete:
       summary: Cancel running search
       description: >+
         (**SYNC - синхронный**)
         Остановка поискового запроса на стороне VM.
-        Объект `Response` содержит значение `search_status = CANCELLED`.
+        Объект `Response` содержит значение `status = CANCELLED`.
         Может содержать полный список результатов выполнения поискового запроса,
         доступных на момент прекращения обработки.
       operationId: cancelSearch
       parameters:
-        - name: search_id
+        - name: id
           in: path
           description: >+
-            Уникальный код поисковой сессии на стороне VM. 
+            Уникальный код поисковой сессии на стороне VM.
             (из ответа 202 при запуске поиска)
           required: true
           schema:
             type: string
             format: uuid
+        - $ref: "#/components/parameters/NaviContextRequestId"
+        - $ref: "#/components/parameters/NaviContextFlowId"
       responses:
         "200":
           description: "SEARCH CANCELLED - Поиск остановлен. Статус CANCELLED"
+          headers:
+            Navi-Context-Request-Id:
+              $ref: "#/components/headers/NaviContextRequestId"
+            Navi-Context-Flow-Id:
+              $ref: "#/components/headers/NaviContextFlowId"
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/SearchResponse"
-
         "401":
           description: "Not Authorized - Токен недействителен"
           headers:
@@ -220,37 +260,50 @@ paths:
               schema:
                 type: string
                 example: Bearer
+            Navi-Context-Request-Id:
+              $ref: "#/components/headers/NaviContextRequestId"
+            Navi-Context-Flow-Id:
+              $ref: "#/components/headers/NaviContextFlowId"
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-
         "404":
           description: "SEARCH NOT FOUND - Поиск не найден"
+          headers:
+            Navi-Context-Request-Id:
+              $ref: "#/components/headers/NaviContextRequestId"
+            Navi-Context-Flow-Id:
+              $ref: "#/components/headers/NaviContextFlowId"
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-
         "409":
           description: >+
-            SEARCH NOT CANCELLABLE - Остановить нечего: поиск уже завершён (DONE), 
+            SEARCH NOT CANCELLABLE - Остановить нечего: поиск уже завершён (DONE),
             либо уже остановлен (CANCELLED)
+          headers:
+            Navi-Context-Request-Id:
+              $ref: "#/components/headers/NaviContextRequestId"
+            Navi-Context-Flow-Id:
+              $ref: "#/components/headers/NaviContextFlowId"
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /order:
-    post:
-      security:
-        - bearerAuth: [] 
 
+  /order/v1/orders:
+    post:
       description: >+
         (**SYNC - синхронный**)
         Пользователь отобрал из поиска товары для закупки и передает
         эти товары для формирования заказа / коммерческого предложения.
       summary: Create purchase order upon search result
       operationId: createPurchaseOrder
+      parameters:
+        - $ref: "#/components/parameters/NaviContextRequestId"
+        - $ref: "#/components/parameters/NaviContextFlowId"
       requestBody:
         description: >+
           Тело запроса на создание заказа / коммерческого предложения.
@@ -260,22 +313,30 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/OrderRequestBody"
+              $ref: "#/components/schemas/OrderRequest"
       responses:
         "202":
           description: Заказ создан успешно
+          headers:
+            Navi-Context-Request-Id:
+              $ref: "#/components/headers/NaviContextRequestId"
+            Navi-Context-Flow-Id:
+              $ref: "#/components/headers/NaviContextFlowId"
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/OrderResponse"
-                
         "400":
           description: "Can't create purchase order"
+          headers:
+            Navi-Context-Request-Id:
+              $ref: "#/components/headers/NaviContextRequestId"
+            Navi-Context-Flow-Id:
+              $ref: "#/components/headers/NaviContextFlowId"
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-
         "401":
           description: "Not Authorized - Токен недействителен"
           headers:
@@ -284,28 +345,39 @@ paths:
               schema:
                 type: string
                 example: Bearer
+            Navi-Context-Request-Id:
+              $ref: "#/components/headers/NaviContextRequestId"
+            Navi-Context-Flow-Id:
+              $ref: "#/components/headers/NaviContextFlowId"
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-
         "404":
           description: "Search Request not found or search results expired"
+          headers:
+            Navi-Context-Request-Id:
+              $ref: "#/components/headers/NaviContextRequestId"
+            Navi-Context-Flow-Id:
+              $ref: "#/components/headers/NaviContextFlowId"
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-
         "410":
           description: "Ordered products not found or expired"
+          headers:
+            Navi-Context-Request-Id:
+              $ref: "#/components/headers/NaviContextRequestId"
+            Navi-Context-Flow-Id:
+              $ref: "#/components/headers/NaviContextFlowId"
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-
         "429":
           description: >+
-           Too Many Requests - превышен лимит на количество запросов
+            Too Many Requests - превышен лимит на количество запросов
           headers:
             Retry-After:
               description: Период ожидания (в секундах) после которого можно повторить запрос.
@@ -313,27 +385,39 @@ paths:
                 minimum: 1
                 type: integer
                 example: 42
+            Navi-Context-Request-Id:
+              $ref: "#/components/headers/NaviContextRequestId"
+            Navi-Context-Flow-Id:
+              $ref: "#/components/headers/NaviContextFlowId"
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "500":
-          description: "Internal Service Error - ALERT: Ошибка сервера
-            (неидентифицированная)"
+          description: "Internal Service Error - ALERT: Ошибка сервера (неидентифицированная)"
+          headers:
+            Navi-Context-Request-Id:
+              $ref: "#/components/headers/NaviContextRequestId"
+            Navi-Context-Flow-Id:
+              $ref: "#/components/headers/NaviContextFlowId"
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "501":
-          description: Not Implemented - Запрос данного типа или в данной конфигурации не
-            поддерживается
+          description: Not Implemented - Запрос данного типа или в данной конфигурации не поддерживается
+          headers:
+            Navi-Context-Request-Id:
+              $ref: "#/components/headers/NaviContextRequestId"
+            Navi-Context-Flow-Id:
+              $ref: "#/components/headers/NaviContextFlowId"
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "503":
           description: >+
-           Service Unavailable
+            Service Unavailable
           headers:
             Retry-After:
               description: Период ожидания (в секундах) после которого можно повторить запрос.
@@ -341,46 +425,85 @@ paths:
                 minimum: 1
                 type: integer
                 example: 120
+            Navi-Context-Request-Id:
+              $ref: "#/components/headers/NaviContextRequestId"
+            Navi-Context-Flow-Id:
+              $ref: "#/components/headers/NaviContextFlowId"
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
 components:
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    NaviContextRequestId:
+      name: Navi-Context-Request-Id
+      in: header
+      required: true
+      description: Уникальный идентификатор запроса
+      schema:
+        type: string
+        maxLength: 128
+    NaviContextFlowId:
+      name: Navi-Context-Flow-Id
+      in: header
+      required: false
+      description: Сквозной идентификатор (correlation id) для отслеживания жизненного цикла созданного REST API ресурса
+      schema:
+        type: string
+
+  headers:
+    NaviContextRequestId:
+      description: Уникальный идентификатор запроса
+      schema:
+        type: string
+        maxLength: 128
+    NaviContextFlowId:
+      description: Сквозной идентификатор (correlation id) для отслеживания жизненного цикла созданного REST API ресурса
+      schema:
+        type: string
+
   schemas:
-    # External request's context provided by client
-    RequestContext:
-      type: object
-      description: >+
-        Контекст запроса, полученный от внешнего клиента.
-        Никогда не изменяется в ходе обработки запроса.
-      required:
-        - request_id
-        - request_timestamp
-      properties:
-        request_id:
-          nullable: false
-          type: "string"
-          format: "uuid"
-          description: "Уникальный код запроса на поиск со стороны отправителя"
-        request_timestamp:
-          nullable: false
-          type: "string"
-          format: date-time
-          description: "ISO 8601 (UTC/Z) - Метка времени создания запроса на стороне отправителя"
-          
-    # General search request parameters
-    SearchRequestBody:
+    # Общие параметры поискового запроса
+    SearchRequest:
       type: "object"
       description: Объект [параметры поискового запроса] от внешней системы
       required:
-        - request_context
-        - query_params
+        - search_pattern
+        - delivery_address
       properties:
-        request_context:
-          $ref: "#/components/schemas/RequestContext"
-        query_params:
-          $ref: "#/components/schemas/QueryParams"
+        search_pattern:
+          nullable: false
+          minLength: 1
+          maxLength: 1000
+          type: "string"
+          description: >+
+            Тело (текст / образец) поискового запроса в свободной форме.
+            Обязательный параметр.
+            Если текст запроса на создание заказа не может быть опознан как содержательный текст,
+            то такой запрос будет отклонен с ошибкой 400.
+        delivery_address:
+          nullable: false
+          type: "string"
+          minLength: 1
+          maxLength: 1000
+          description: >+
+            Адрес доставки.
+            Обязательный параметр.
+            Если текст параметра не может быть валидирован как адрес,
+            то запрос будет отклонен с ошибкой 400.
+        query_filters:
+          nullable: true
+          type: object
+          allOf: 
+            - $ref: '#/components/schemas/QueryFilters'
 
     # SEARCH RESPONSE object
     SearchResponse:
@@ -389,16 +512,9 @@ components:
         Объект успешного ответа сервера VM для эндпоинтов SEARCH.
         Для HTTP-ошибок используется отдельная схема ErrorResponse.
       required:
-        - request_context
-        - description
         - timestamp
         - expires_at
       properties:
-        request_context:
-          $ref: "#/components/schemas/RequestContext"
-        description:
-          type: string
-          description: Расширенное описание статуса ответа VM
         timestamp:
           type: string
           format: date-time
@@ -410,31 +526,29 @@ components:
             Метка времени ISO-8601 (UTC/Z), до которой доступны данные поисковой сессии.
             Равна timestamp текущего ответа плюс 24 часа.
             При каждом успешном ответе SEARCH срок доступности обновляется.
-        search_id:
+        id:
           type: string
-          nullable: true
+          nullable: false
           format: uuid
           description: >+
             Уникальный код поисковой сессии на стороне VM.
-            **request_id <-> search_id** образуют уникальную пару для точной идентификации и
+            **Navi-Context-Request-Id <-> id** образуют уникальную пару для точной идентификации и
             сопоставления результатов с конкретным поисковым запросом.
-            **Может** иметь значение NULL, если `search_status = NONE`.
-        search_status:
+        status:
           type: string
           nullable: false
           description: >+
             Текущий статус выполнения поискового запроса на стороне VM:
-            NONE - поисковый запрос не запущен
             RUNNING - поисковый запрос выполняется
             DONE - поисковый запрос завершен. Доступны результаты.
             CANCELLED - поисковый запрос остановлен по запросу внешней системы. Если результаты есть, то они доступны в ответе.
             ERROR - поисковый запрос прерван из-за ошибки на стороне выполнения. Результаты недоступны.
-          default: NONE
-          enum: [NONE, RUNNING, DONE, CANCELLED, ERROR]
-        search_result:
+          default: RUNNING
+          enum: [RUNNING, DONE, CANCELLED, ERROR]
+        result:
           # Контейнер с доступными результатами выполнения поискового запроса.
           $ref: "#/components/schemas/SearchResult"
-       
+
     ErrorResponse:
       type: object
       description: Единый формат ответа для всех HTTP-ошибок API.
@@ -449,13 +563,6 @@ components:
         message:
           type: string
           description: Описание ошибки.
-        request_context:
-          type: object
-          description: Контекст запроса, если идентификатор запроса удалось получить.
-          properties:
-            request_id:
-              type: string
-              description: Идентификатор запроса со стороны отправителя, если он доступен.
         params:
           type: string
           description: Дополнительные параметры ошибки, если они доступны.
@@ -466,8 +573,6 @@ components:
       example:
         error: string
         message: string
-        request_context:
-          request_id: string
         params: string
         timestamp: "2026-11-09T10:07:20.666Z"
 
@@ -477,32 +582,14 @@ components:
       description: >+
         Контейнер с атрибутами поиска и массивом результатов обработки поискового запроса.
         Каждый ответ содержит полный список результатов, доступных на момент формирования ответа.
-        При `search_status = RUNNING` это все результаты, найденные к текущему моменту,
+        При `status = RUNNING` это все результаты, найденные к текущему моменту,
         а не только новые результаты с момента предыдущего ответа.
-        При `search_status = DONE` содержит итоговый список, если результаты доступны.
-      required:
-        - query_params
-        - items_count
-        - items
-      properties:  
-        query_params:
-          $ref: "#/components/schemas/QueryParams"
-        items_count:
-          type: integer
-          description: Количество товаров; 0 = товары не найдены
-        items:
-          type: array
-          items:
-            $ref: "#/components/schemas/ProductCard"
-    
-    QueryParams:
-      type: object
-      description: >+
-        Параметры поиска, в т.ч. необязательные, которые должны учитываться при 
-        выполнении запроса.
+        При `status = DONE` содержит итоговый список, если результаты доступны.
       required:
         - search_pattern
         - delivery_address
+        - items_count
+        - items
       properties:
         search_pattern:
           nullable: false
@@ -525,6 +612,13 @@ components:
           nullable: true
           type: object
           $ref: '#/components/schemas/QueryFilters'
+        items_count:
+          type: integer
+          description: Количество товаров; 0 = товары не найдены
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProductCard"
 
     QueryFilters:
       type: object
@@ -623,12 +717,12 @@ components:
             При отсутствии параметра или null ограничение срока доставки не задаётся.
           type: string
           nullable: true
-          enum: [today, tomorrow, from_1_hour, up_to_3_days, up_to_5_days, up_to_12_days, null]
+          enum: [today, tomorrow, from_1_hour, up_to_3_days, up_to_5_days, up_to_12_days]
 
     ProductCard:
       type: object
       description: >+
-        Карточка товара в результатах поиска. 
+        Карточка товара в результатах поиска.
         Представлена в структуре эталонной карточки.
       required:
         - product_id
@@ -642,7 +736,7 @@ components:
           format: uuid
           description: >+
             Идентификатор карточки товара в поиске.
-            **Важно!** Данный id определяет карточку, а не конкретный товар! Один и тот же товар 
+            **Важно!** Данный id определяет карточку, а не конкретный товар! Один и тот же товар
             в разных сессиях поиска будет иметь совершенно разные product_id.
         rank:
           description: >+
@@ -664,7 +758,7 @@ components:
           description: Список предложений по товару из источников (поставщиков)
           items:
             $ref: "#/components/schemas/Offer"
-    
+
     ProductDescription:
       type: object
       description: Общее описание товара
@@ -713,11 +807,11 @@ components:
           items:
             type: string
             format: uri
-    
+
     Characteristics:
       type: object
       description: >+
-        Характеристика товара - формируется динамически по данным, 
+        Характеристика товара - формируется динамически по данным,
         доступным в описании товара во внешней системе.
       required:
         - name
@@ -735,7 +829,7 @@ components:
           type: string
           nullable: true
           description: Единица измерения характеристики (может отсутствовать)
-   
+
     Offer:
       type: object
       description: Конкретное предложение, релевантное данному товару
@@ -787,6 +881,7 @@ components:
           description: Название поставщика по данным источника
         supplier_rating:
           type: number
+          nullable: true
           description: Рейтинг поставщика
         images:
           description: Ссылки на изображения товара в источнике предложения.
@@ -812,7 +907,6 @@ components:
           type: number
           minimum: 0
           exclusiveMinimum: true
-          format: float
         delivery_address:
           nullable: false
           type: "string"
@@ -826,7 +920,7 @@ components:
         product:
           $ref: "#/components/schemas/ProductCard"
 
-    OrderRequestBody:
+    OrderRequest:
       description: Тело запроса на формирование заказа на закупку или подготовку коммерческого предложения
       type: object
       required:
@@ -840,7 +934,7 @@ components:
         selected_items:
           description: >+
             Массив объектов `OrderCard` (т.е. полное описание товара, и количество для заказа.
-            Содержит предложения по данному товару в результатах поиска, 
+            Содержит предложения по данному товару в результатах поиска,
             отобранные на стороне внешней системы для формирования заказа.
           type: array
           items:
@@ -852,18 +946,11 @@ components:
       description: >+
         Объект [ответ] сервера VM на запрос создания заказа на закупку.
       required:
-        - request_context
-        - description
         - timestamp
         - search_id
+        - id
+        - status
       properties:
-        request_context:
-          $ref: "#/components/schemas/RequestContext"
-
-        description:
-          type: string
-          description: Расширенное описание статуса ответа VM
-
         timestamp:
           type: string
           format: date-time
@@ -875,11 +962,10 @@ components:
           format: uuid
           description: >+
             Уникальный код поисковой сессии на стороне VM.
-            **request_id <-> search_id** образуют уникальную пару для точной идентификации и
+            **Navi-Context-Request-Id <-> search_id** образуют уникальную пару для точной идентификации и
             сопоставления результатов с конкретным поисковым запросом.
-            **Может** иметь значение NULL, если `search_status = NONE`.
 
-        order_id:
+        id:
           description: >+
             ID запроса на формирование заказа, сформированного на стороне VM.
             Может иметь значение `null`, если при формировании заказа возникли ошибки.
@@ -887,21 +973,15 @@ components:
           nullable: true
           format: "uuid"
 
-        order_status:
+        status:
           description: >+
             Статус запроса на создание заказа. Этот статус отправляется в синхронном режиме,
-            т.е. запросившая сторона всегда получает информацию о данном статусе сиинхронно 
+            т.е. запросившая сторона всегда получает информацию о данном статусе синхронно
             с запросом.
           type: string
-          default: Created
+          default: CREATED
           enum:
-            # TODO: Согласовать с другой стороной
-            [Declined, Created]
-            # Варианты интерпретации:
-            # Declined: Запрос отклонен; ошибки API описаны схемой ErrorResponse.
-            #  Created: Запрос принят и находится в обработка. Дальнейшая работа по заказу [order_id] 
-            #           производится вне данного API
-
+            [CREATED]
 
     Currencies:
       description: Валюта стоимостного показателя - трехбуквенный код в формате ISO 4217
@@ -916,11 +996,11 @@ components:
         code:
           type: string
           default: RUB
-          enum: [RUB, USD, EUR, <see extDoc>]
+          enum: [RUB, USD, EUR]
 
     Dimensions:
       type: object
-      nullable: true      
+      nullable: true
       description: >+
         Физические размеры объекта поиска по данным продавца
       properties:
@@ -939,14 +1019,4 @@ components:
         unit:
           type: string
           description: Единица измерения - указывается по данным поставщика. Нормализация не применяется.
-
-  securitySchemes:
-    bearerAuth:
-      description: >+
-        Bearer-токен обязателен для всех запросов API.
-        Передаётся в заголовке Authorization: Bearer <token>.
-        Должен однозначно указывать на конкретного сервис-партнера и конкретного пользователя или организацию
-        авторизованного для выполнения данного запроса.
-      type: http
-      scheme: bearer
-      bearerFormat: JWT
+     
