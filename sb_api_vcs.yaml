@@ -983,6 +983,16 @@ components:
           enum:
             [CREATED]
 
+        view:
+          type: string
+          nullable: true
+          description: >+
+            При успешном создании - ссылка на страницу заказа, 
+            сформированного на стороне V.Market. Если заказ не создан (по любой причине), то null
+          format: uri
+          example: https://vesnamarket.ru/search/{id}/order
+
+
     Currencies:
       description: Валюта стоимостного показателя - трехбуквенный код в формате ISO 4217
       type: object
